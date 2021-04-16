@@ -1,15 +1,11 @@
 #![allow(unused_mut)]
 #![allow(unused_variables)]
-use core::cmp::min;
+use core::cmp::{max, min};
 use core::f32::consts::PI;
 use micromath::F32Ext;
 use ordered_float::OrderedFloat;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FilterType {
-    LowPass,
-    HighPass,
-}
+use crate::delay::DelayLine;
 
 pub struct OnePoleLowPass {
     sample_rate: f32,
@@ -39,6 +35,67 @@ impl OnePoleLowPass {
         self.z1
     }
 }
+
+pub struct AllPass {
+    sample_rate: f32,
+    delay_line: DelayLine,
+    index: usize,
+    reverb_time: f32,
+    max_loop_time: f32,
+    loop_time: f32,
+    rollover: usize,
+    coef: f32,
+}
+
+impl AllPass {
+    pub fn new(sample_rate: f32, delay_line: DelayLine) -> AllPass {
+        let max_loop_time: f32 = delay_line.len() as f32 / sample_rate - 0.01;
+        let rollover = (max_loop_time * sample_rate) as usize;
+
+        let mut all_pass = AllPass {
+            sample_rate,
+            delay_line,
+            loop_time: max_loop_time,
+            max_loop_time,
+            index: 0,
+            rollover,
+            coef: 0.0,
+            reverb_time: 3.5,
+        };
+        all_pass.calc_reverb();
+        all_pass
+    }
+
+    fn calc_reverb(&mut self) {
+        self.coef = (-6.9078 * self.loop_time / self.reverb_time).exp();
+    }
+
+    pub fn process(&mut self, input: f32) -> f32 {
+        let y = self.delay_line[self.index];
+        let z = self.coef * y + input;
+        self.delay_line[self.index] = z;
+
+        self.index = (self.index + 1) % self.rollover;
+
+        y - self.coef * z
+    }
+
+    pub fn set_freq(&mut self, frequency: f32) {
+        self.loop_time = max(
+            min(OrderedFloat(frequency), OrderedFloat(self.max_loop_time)),
+            OrderedFloat(0.0001),
+        )
+        .0;
+        self.rollover = max((self.loop_time * self.sample_rate) as usize, 0);
+        self.calc_reverb();
+    }
+
+    pub fn set_reverb_time(&mut self, reverb_time: f32) {
+        self.reverb_time = reverb_time;
+        self.calc_reverb();
+    }
+}
+
 
 pub struct StateVariable {
     sample_rate: f32,

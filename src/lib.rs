@@ -4,6 +4,7 @@
 pub mod filter;
 
 mod delay {
+    use core::ops::{Index, IndexMut};
 
     pub struct DelayLine {
         inner: &'static mut [f32],
@@ -29,6 +30,24 @@ mod delay {
         pub fn write(&mut self, input: f32) {
             self.index = (self.index + 1) % self.inner.len();
             self.inner[self.index] = input;
+        }
+
+        pub fn len(&self) -> usize {
+            self.inner.len()
+        }
+    }
+
+    impl Index<usize> for DelayLine {
+        type Output = f32;
+
+        fn index(&self, index: usize) -> &Self::Output {
+            &self.inner[index]
+        }
+    }
+
+    impl IndexMut<usize> for DelayLine {
+        fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+            &mut self.inner[index]
         }
     }
 }
