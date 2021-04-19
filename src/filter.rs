@@ -36,9 +36,9 @@ impl OnePoleLowPass {
     }
 }
 
-pub struct AllPass {
+pub struct AllPass<'a> {
     sample_rate: f32,
-    delay_line: DelayLine,
+    delay_line: DelayLine<'a>,
     index: usize,
     reverb_time: f32,
     max_loop_time: f32,
@@ -47,8 +47,8 @@ pub struct AllPass {
     coef: f32,
 }
 
-impl AllPass {
-    pub fn new(sample_rate: f32, delay_line: DelayLine) -> AllPass {
+impl<'a> AllPass<'a> {
+    pub fn new(sample_rate: f32, delay_line: DelayLine<'a>) -> AllPass {
         let max_loop_time: f32 = delay_line.len() as f32 / sample_rate - 0.01;
         let rollover = (max_loop_time * sample_rate) as usize;
 
@@ -60,7 +60,7 @@ impl AllPass {
             index: 0,
             rollover,
             coef: 0.0,
-            reverb_time: 3.5,
+            reverb_time: 0.0,
         };
         all_pass.calc_reverb();
         all_pass
@@ -95,7 +95,6 @@ impl AllPass {
         self.calc_reverb();
     }
 }
-
 
 pub struct StateVariable {
     sample_rate: f32,
@@ -495,6 +494,38 @@ mod tests {
             &spectrum.to_map(None),
             TEST_OUT_DIR,
             &format!("test_svf_peak.png"),
+        );
+    }
+
+    #[test]
+    fn test_all_pass() {
+        let between = Uniform::new_inclusive(-1.0, 1.0);
+        let mut rng = rand::thread_rng();
+
+        let mut data: [f32; 4096] = [0.0; 4096];
+        let mut buffer: [f32; 2048] = [0.0; 2048];
+        let delay_line = DelayLine::new(&mut buffer);
+        data[0] = 1.0;
+        let mut filter = AllPass::new(44100.0, delay_line);
+        filter.set_freq(80.0);
+        for item in &mut data {
+            filter.process(*item);
+            *item = filter.process(*item);
+        }
+
+        // calc spectrum
+        let spectrum = samples_fft_to_spectrum(
+            &data,
+            44100,
+            FrequencyLimit::Max(10_000.0),
+            None,
+            Some(scale_to_log()),
+        );
+
+        spectrum_static_plotters_png_visualize(
+            &spectrum.to_map(None),
+            TEST_OUT_DIR,
+            &format!("test_all_pass.png"),
         );
     }
 }
