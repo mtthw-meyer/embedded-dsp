@@ -3,6 +3,7 @@
 Cargo.lock
 *.hex
 *.bin
+*.png
 .gdb_history
 Embed.toml
 

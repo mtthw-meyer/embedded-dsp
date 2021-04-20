@@ -238,10 +238,14 @@ impl StateVariable {
 
 #[cfg(test)]
 mod tests {
+    const SAMPLE_RATE_F: f32 = 44100.0;
+    const SAMPLE_RATE: u32 = 44100;
+    const NYQUIST: f32 = SAMPLE_RATE_F / 2.0;
     use super::*;
 
     use audio_visualizer::spectrum::staticc::plotters_png_file::spectrum_static_plotters_png_visualize;
     use audio_visualizer::test_support::TEST_OUT_DIR;
+    use plotters::prelude::*;
     use rand::distributions::{Distribution, Uniform};
     use spectrum_analyzer::windows::{blackman_harris_4term, hamming_window, hann_window};
     use spectrum_analyzer::{
@@ -290,7 +294,7 @@ mod tests {
 
         let mut white_noise: [f32; 4096] = [0.0; 4096];
         white_noise[0] = 1.0;
-        let mut filter = OnePoleLowPass::new(44100.0);
+        let mut filter = OnePoleLowPass::new(SAMPLE_RATE_F);
         filter.set_freq(100.0);
         for item in &mut white_noise {
             // *item = filter.process(between.sample(&mut rng));
@@ -300,17 +304,32 @@ mod tests {
         // calc spectrum
         let spectrum = samples_fft_to_spectrum(
             &white_noise,
-            44100,
-            FrequencyLimit::Max(2000.0),
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
             None,
-            Some(scale_to_log()),
+            None,
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_onepole_low.png"),
-        );
+        let root = BitMapBackend::new("test_onepole_low.png", (640, 480)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&root)
+            .caption("LPF 100 Hz", ("sans-serif", 50).into_font())
+            .margin(5)
+            .x_label_area_size(30)
+            .y_label_area_size(30)
+            .build_cartesian_2d(LogRange(1e-5..NYQUIST), -51f32..11f32)
+            .unwrap();
+
+        chart.configure_mesh().draw().unwrap();
+
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, (*y).log10() * 20.0))
+            .collect();
+
+        println!("{:?}, {:?}", data[0].1, data.last().unwrap().1);
+        chart.draw_series(LineSeries::new(data, &RED)).unwrap();
     }
 
     #[test]

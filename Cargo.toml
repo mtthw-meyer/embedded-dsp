@@ -15,3 +15,4 @@ ordered-float = { version = "2.1.1", default-features = false }
 rand = "0.8.3"
 spectrum-analyzer = "0.5.0"
 audio-visualizer = "0.2.2"
+plotters = "0.3.0"
