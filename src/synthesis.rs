@@ -129,18 +129,16 @@ fn poly_blep(phase_inc: f32, t: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    const SAMPLE_RATE: f32 = 44100.0;
+    const SAMPLE_RATE: u32 = 44100;
+    const SAMPLE_RATE_F: f32 = 44100.0;
+
     use super::*;
 
     use plotters::prelude::*;
-    use spectrum_analyzer::windows::{blackman_harris_4term, hamming_window, hann_window};
-    use spectrum_analyzer::{
-        samples_fft_to_spectrum, scaling, ComplexSpectrumScalingFunction, FrequencyLimit,
-    };
 
     #[test]
     fn test_sine() {
-        let mut oscillator = Oscillator::new(WaveType::Sine, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::Sine, SAMPLE_RATE_F, 1.5);
         let root = BitMapBackend::new("test_sine.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
         let mut chart = ChartBuilder::on(&root)
@@ -155,8 +153,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -164,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_triangle() {
-        let mut oscillator = Oscillator::new(WaveType::Triangle, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::Triangle, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_triangle.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -180,8 +177,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -189,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_ramp() {
-        let mut oscillator = Oscillator::new(WaveType::Ramp, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::Ramp, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_ramp.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -205,8 +201,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -214,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_saw() {
-        let mut oscillator = Oscillator::new(WaveType::Saw, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::Saw, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_saw.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -230,8 +225,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -239,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_square() {
-        let mut oscillator = Oscillator::new(WaveType::Square, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::Square, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_square.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -255,8 +249,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -264,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_poly_square() {
-        let mut oscillator = Oscillator::new(WaveType::PolyBLEPSquare, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::PolyBLEPSquare, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_poly_square.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -280,8 +273,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -289,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_poly_triangle() {
-        let mut oscillator = Oscillator::new(WaveType::PolyBLEPTri, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::PolyBLEPTri, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_poly_triangle.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -305,8 +297,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();
@@ -314,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_poly_saw() {
-        let mut oscillator = Oscillator::new(WaveType::PolyBLEPSaw, SAMPLE_RATE, 1.5);
+        let mut oscillator = Oscillator::new(WaveType::PolyBLEPSaw, SAMPLE_RATE_F, 1.5);
 
         let root = BitMapBackend::new("test_poly_saw.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -330,8 +321,7 @@ mod tests {
 
         chart
             .draw_series(LineSeries::new(
-                (0..(SAMPLE_RATE as u32 * 5))
-                    .map(|x| (x as f32 / SAMPLE_RATE, oscillator.process())),
+                (0..(SAMPLE_RATE * 5)).map(|x| (x as f32 / SAMPLE_RATE_F, oscillator.process())),
                 &RED,
             ))
             .unwrap();

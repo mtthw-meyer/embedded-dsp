@@ -1,5 +1,3 @@
-#![allow(unused_mut)]
-#![allow(unused_variables)]
 use core::cmp::{max, min};
 use core::f32::consts::PI;
 use micromath::F32Ext;
@@ -102,7 +100,6 @@ pub struct StateVariable {
     high_pass: f32,
     band_pass: f32,
     notch: f32,
-    peak: f32,
     freq: f32,
     resonance: f32,
     pre_drive: f32,
@@ -124,7 +121,6 @@ impl StateVariable {
             high_pass: 0.0,
             band_pass: 0.0,
             notch: 0.0,
-            peak: 0.0,
             freq: 0.0,
             resonance: 0.0,
             pre_drive: 0.0,
@@ -241,21 +237,26 @@ mod tests {
     const SAMPLE_RATE_F: f32 = 44100.0;
     const SAMPLE_RATE: u32 = 44100;
     const NYQUIST: f32 = SAMPLE_RATE_F / 2.0;
+
     use super::*;
 
-    use audio_visualizer::spectrum::staticc::plotters_png_file::spectrum_static_plotters_png_visualize;
-    use audio_visualizer::test_support::TEST_OUT_DIR;
     use plotters::prelude::*;
     use rand::distributions::{Distribution, Uniform};
-    use spectrum_analyzer::windows::{blackman_harris_4term, hamming_window, hann_window};
-    use spectrum_analyzer::{
-        samples_fft_to_spectrum, scaling, ComplexSpectrumScalingFunction, FrequencyLimit,
-    };
+    use spectrum_analyzer::{samples_fft_to_spectrum, scaling, FrequencyLimit};
 
-    fn scale_to_log() -> ComplexSpectrumScalingFunction {
-        Box::new(move |_min: f32, max: f32, _average: f32, _median: f32| {
-            Box::new(move |x| (x + 1.0).log10())
-        })
+    fn graph_log_log(data: Vec<(f32, f32)>, label: &str, path: &str) {
+        let root = BitMapBackend::new(path, (640, 480)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&root)
+            .caption(label, ("sans-serif", 50).into_font())
+            .margin(5)
+            .x_label_area_size(30)
+            .y_label_area_size(30)
+            .build_cartesian_2d(LogRange(0.1..NYQUIST), -51f32..11f32)
+            .unwrap();
+
+        chart.configure_mesh().draw().unwrap();
+        chart.draw_series(LineSeries::new(data, &RED)).unwrap();
     }
 
     #[test]
@@ -275,276 +276,269 @@ mod tests {
             // sampling rate
             44100,
             // optional frequency limit: e.g. only interested in frequencies 50 <= f <= 150?
-            FrequencyLimit::Max(2000.0),
+            FrequencyLimit::Max(NYQUIST),
             Some(&scaling::basic::scale_20_times_log10),
             None,
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_white_noise.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "White Noise", "test_white_noise.png");
     }
 
     #[test]
     fn test_onepole_low() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = OnePoleLowPass::new(SAMPLE_RATE_F);
         filter.set_freq(100.0);
-        for item in &mut white_noise {
-            // *item = filter.process(between.sample(&mut rng));
+        for item in &mut instant {
             *item = filter.process(*item);
         }
 
         // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
+            &instant,
             SAMPLE_RATE,
             FrequencyLimit::Max(NYQUIST),
-            None,
+            Some(&scaling::basic::scale_20_times_log10),
             None,
         );
-
-        let root = BitMapBackend::new("test_onepole_low.png", (640, 480)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let mut chart = ChartBuilder::on(&root)
-            .caption("LPF 100 Hz", ("sans-serif", 50).into_font())
-            .margin(5)
-            .x_label_area_size(30)
-            .y_label_area_size(30)
-            .build_cartesian_2d(LogRange(1e-5..NYQUIST), -51f32..11f32)
-            .unwrap();
-
-        chart.configure_mesh().draw().unwrap();
 
         let data: Vec<(f32, f32)> = spectrum
             .to_map(None)
             .iter()
-            .map(|(x, y)| (*x as f32, (*y).log10() * 20.0))
+            .map(|(x, y)| (*x as f32, *y))
             .collect();
 
-        println!("{:?}, {:?}", data[0].1, data.last().unwrap().1);
-        chart.draw_series(LineSeries::new(data, &RED)).unwrap();
+        for (hz, db) in &data {
+            if *hz < 100.0 {
+                assert!(*db > -3.0);
+            } else if *hz < 120.0 {
+                assert!(*db < -3.0);
+            } else {
+                break;
+            }
+        }
+        graph_log_log(data, "LPF 100 Hz", "test_onepole_low.png");
     }
 
     #[test]
     fn test_onepole_high() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
-        let mut filter = OnePoleLowPass::new(44100.0);
-        filter.set_freq(8000.0);
-        for item in &mut white_noise {
-            *item = *item - filter.process(*item);
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
+        let mut filter = OnePoleLowPass::new(SAMPLE_RATE_F);
+        filter.set_freq(100.0);
+        for item in &mut instant {
+            *item -= filter.process(*item);
         }
 
         // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_onepole_high.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        for (hz, db) in &data {
+            if *hz < 100.0 {
+                assert!(*db < -3.0);
+            } else if *hz < 120.0 {
+                assert!(*db > -3.0);
+            } else {
+                break;
+            }
+        }
+
+        graph_log_log(data, "HPF 100 Hz", "test_onepole_high.png");
     }
 
     #[test]
     fn test_svf_lpf() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = StateVariable::new(44100.0);
-        filter.set_freq(1000.0);
-        // filter.set_resonance(0.5);
-        for item in &mut white_noise {
+        filter.set_freq(100.0);
+        filter.set_resonance(0.0);
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.get_low_pass();
         }
 
         // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_svf_low.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "SVF LP 100 Hz", "test_svf_lpf.png");
     }
 
     #[test]
     fn test_svf_hpf() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = StateVariable::new(44100.0);
-        filter.set_freq(1000.0);
+        filter.set_freq(100.0);
+        filter.set_resonance(0.0);
         // filter.set_resonance(0.5);
-        for item in &mut white_noise {
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.get_high_pass();
         }
 
-        // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_svf_high.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "SVF HP 100 Hz", "test_svf_hpf.png");
     }
 
     #[test]
     fn test_svf_band() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = StateVariable::new(44100.0);
-        filter.set_freq(1000.0);
+        filter.set_freq(800.0);
         filter.set_resonance(0.01);
-        for item in &mut white_noise {
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.get_band_pass();
         }
 
-        // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_svf_band.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "SVF Band 100 Hz", "test_svf_band.png");
     }
 
     #[test]
     fn test_svf_notch() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = StateVariable::new(44100.0);
         filter.set_freq(1000.0);
         filter.set_resonance(0.5);
-        for item in &mut white_noise {
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.get_notch();
         }
 
-        // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_svf_notch.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "SVF Notch 100 Hz", "test_svf_notch.png");
     }
 
     #[test]
     fn test_svf_peak() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut white_noise: [f32; 4096] = [0.0; 4096];
-        white_noise[0] = 1.0;
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        instant[0] = 1.0;
         let mut filter = StateVariable::new(44100.0);
         filter.set_freq(1000.0);
         filter.set_resonance(0.5);
-        for item in &mut white_noise {
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.get_peak();
         }
 
-        // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &white_noise,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_svf_peak.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "SVF Peak", "test_svf_peak.png");
     }
 
     #[test]
     fn test_all_pass() {
-        let between = Uniform::new_inclusive(-1.0, 1.0);
-        let mut rng = rand::thread_rng();
-
-        let mut data: [f32; 4096] = [0.0; 4096];
+        let mut instant: [f32; 4096] = [0.0; 4096];
         let mut buffer: [f32; 2048] = [0.0; 2048];
         let delay_line = DelayLine::new(&mut buffer);
-        data[0] = 1.0;
+        instant[0] = 1.0;
         let mut filter = AllPass::new(44100.0, delay_line);
         filter.set_freq(80.0);
-        for item in &mut data {
+        for item in &mut instant {
             filter.process(*item);
             *item = filter.process(*item);
         }
 
-        // calc spectrum
         let spectrum = samples_fft_to_spectrum(
-            &data,
-            44100,
-            FrequencyLimit::Max(10_000.0),
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
             None,
-            Some(scale_to_log()),
         );
 
-        spectrum_static_plotters_png_visualize(
-            &spectrum.to_map(None),
-            TEST_OUT_DIR,
-            &format!("test_all_pass.png"),
-        );
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "All Pass", "test_all_pass.png");
     }
 }
