@@ -29,15 +29,14 @@ impl OnePoleLowPass {
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
-        self.z1 = input * self.a0 + self.z1 * self.b1;
+        self.z1 = (input * self.a0) + (self.z1 * self.b1);
         self.z1
     }
 }
 
-pub struct AllPass<'a> {
+pub struct AllPassSP<'a> {
     sample_rate: f32,
     delay_line: DelayLine<'a>,
-    index: usize,
     reverb_time: f32,
     max_loop_time: f32,
     loop_time: f32,
@@ -45,17 +44,16 @@ pub struct AllPass<'a> {
     coef: f32,
 }
 
-impl<'a> AllPass<'a> {
-    pub fn new(sample_rate: f32, delay_line: DelayLine<'a>) -> AllPass {
+impl<'a> AllPassSP<'a> {
+    pub fn new(sample_rate: f32, delay_line: DelayLine<'a>) -> Self {
         let max_loop_time: f32 = delay_line.len() as f32 / sample_rate - 0.01;
         let rollover = (max_loop_time * sample_rate) as usize;
 
-        let mut all_pass = AllPass {
+        let mut all_pass = Self {
             sample_rate,
             delay_line,
             loop_time: max_loop_time,
             max_loop_time,
-            index: 0,
             rollover,
             coef: 0.0,
             reverb_time: 0.0,
@@ -69,18 +67,16 @@ impl<'a> AllPass<'a> {
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
-        let y = self.delay_line[self.index];
-        let z = self.coef * y + input;
-        self.delay_line[self.index] = z;
+        let y = self.delay_line.read();
+        let z = (self.coef * y) + input;
+        self.delay_line.write(z);
 
-        self.index = (self.index + 1) % self.rollover;
-
-        y - self.coef * z
+        y - (self.coef * z)
     }
 
-    pub fn set_freq(&mut self, frequency: f32) {
+    pub fn set_freq(&mut self, delay: f32) {
         self.loop_time = max(
-            min(OrderedFloat(frequency), OrderedFloat(self.max_loop_time)),
+            min(OrderedFloat(delay), OrderedFloat(self.max_loop_time)),
             OrderedFloat(0.0001),
         )
         .0;
@@ -91,6 +87,35 @@ impl<'a> AllPass<'a> {
     pub fn set_reverb_time(&mut self, reverb_time: f32) {
         self.reverb_time = reverb_time;
         self.calc_reverb();
+    }
+}
+
+pub struct AllPass<'a> {
+    sample_rate: f32,
+    delay_line: DelayLine<'a>,
+    k1: f32,
+}
+
+impl<'a> AllPass<'a> {
+    pub fn new(sample_rate: f32, delay_line: DelayLine<'a>) -> Self {
+        Self {
+            sample_rate,
+            k1: 0.0,
+            delay_line,
+        }
+    }
+
+    pub fn process(&mut self, input: f32) -> f32 {
+        let z1 = self.delay_line.read();
+        let x = (self.k1 * z1) + input;
+        self.delay_line.write(x);
+
+        z1 - (self.k1 * x)
+    }
+
+    pub fn set_freq(&mut self, freq: f32) {
+        let freq = PI * freq / self.sample_rate;
+        self.k1 = (1.0 - freq) / (1.0 + freq);
     }
 }
 
@@ -513,13 +538,13 @@ mod tests {
     }
 
     #[test]
-    fn test_all_pass() {
+    fn test_all_pass_1() {
         let mut instant: [f32; 4096] = [0.0; 4096];
-        let mut buffer: [f32; 2048] = [0.0; 2048];
+        let mut buffer: [f32; 1] = [0.0; 1];
         let delay_line = DelayLine::new(&mut buffer);
         instant[0] = 1.0;
-        let mut filter = AllPass::new(44100.0, delay_line);
-        filter.set_freq(80.0);
+        let mut filter = AllPass::new(SAMPLE_RATE_F, delay_line);
+        filter.set_freq(100.0);
         for item in &mut instant {
             filter.process(*item);
             *item = filter.process(*item);
@@ -539,6 +564,36 @@ mod tests {
             .map(|(x, y)| (*x as f32, *y))
             .collect();
 
-        graph_log_log(data, "All Pass", "test_all_pass.png");
+        graph_log_log(data, "All Pass - 1", "test_all_pass_1.png");
+    }
+
+    #[test]
+    fn test_all_pass_512() {
+        let mut instant: [f32; 4096] = [0.0; 4096];
+        let mut buffer: [f32; 512] = [0.0; 512];
+        let delay_line = DelayLine::new(&mut buffer);
+        instant[0] = 1.0;
+        let mut filter = AllPass::new(SAMPLE_RATE_F, delay_line);
+        filter.set_freq(1000.0);
+        for item in &mut instant {
+            filter.process(*item);
+            *item = filter.process(*item);
+        }
+
+        let spectrum = samples_fft_to_spectrum(
+            &instant,
+            SAMPLE_RATE,
+            FrequencyLimit::Max(NYQUIST),
+            Some(&scaling::basic::scale_20_times_log10),
+            None,
+        );
+
+        let data: Vec<(f32, f32)> = spectrum
+            .to_map(None)
+            .iter()
+            .map(|(x, y)| (*x as f32, *y))
+            .collect();
+
+        graph_log_log(data, "All Pass - 512", "test_all_pass_512.png");
     }
 }

@@ -1,6 +1,6 @@
-use core::f32::consts::PI;
 use micromath::F32Ext;
 
+use core::f32::consts::PI;
 const TWO_PI: f32 = PI * 2.0;
 const TWO_PI_RECIP: f32 = 1.0 / TWO_PI;
 

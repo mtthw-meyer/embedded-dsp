@@ -1,8 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 pub mod filter;
+pub mod reverb;
 pub mod synthesis;
 
-mod delay {
+pub mod delay {
     use core::ops::{Index, IndexMut};
 
     pub struct DelayLine<'a> {
@@ -22,13 +23,17 @@ mod delay {
             output
         }
 
-        pub fn read(self, index: usize) -> f32 {
+        pub fn get(&self, index: usize) -> f32 {
             self.inner[index % self.inner.len()]
         }
 
+        pub fn read(&self) -> f32 {
+            self.inner[self.index]
+        }
+
         pub fn write(&mut self, input: f32) {
-            self.index = (self.index + 1) % self.inner.len();
             self.inner[self.index] = input;
+            self.index = (self.index + 1) % self.inner.len();
         }
 
         pub fn len(&self) -> usize {
@@ -50,9 +55,3 @@ mod delay {
         }
     }
 }
-
-// mod reverb {
-//     pub struct Dattorro {}
-
-//     impl Dattorro {}
-// }
